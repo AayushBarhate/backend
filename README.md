@@ -2,61 +2,84 @@
 
 The Flask-based backend server for SmartTV that provides API services, Twilio integration for video calling, and real-time communication support for multiplayer features.
 
-## 🏗️ Overview
+## Overview
 
 This Flask application serves as the backend API for the SmartTV application, providing:
-- Twilio access token generation for video calling
-- Health check endpoints for monitoring
-- CORS-enabled API for cross-origin requests
-- Modular architecture with services and API routes
+- User registration and management system
+- Contact management and presence tracking
+- Twilio-powered video calling with crash-resistant call cleanup
+- Real-time communication via WebSocket
+- Mobile remote control functionality
+- Comprehensive logging with Discord integration
+- Background service for automated tasks
+- SQLite database for data persistence
 
-## 🚀 Architecture
+## Architecture
 
 ### Project Structure
 
 ```
-server_side/
-├── app.py                 # Flask application factory and main entry point
+backend/
+├── app.py                      # Flask application factory and main entry point
+├── wsgi.py                     # WSGI configuration for production deployment
+├── requirements.txt            # Python dependencies
 ├── api/
-│   └── twilio_routes.py   # Twilio API endpoints
+│   ├── admin_routes.py         # Admin and system management endpoints
+│   ├── call_routes.py          # Call management and history endpoints
+│   ├── contact_routes.py       # Contact management endpoints
+│   ├── remote_routes.py        # Mobile remote control WebSocket handlers
+│   ├── twilio_routes.py        # Twilio integration and token generation
+│   ├── update_routes.py        # Application update management
+│   └── user_routes.py          # User registration and management
 ├── services/
-│   └── twilio_service.py  # Twilio business logic and service layer
-├── .env                   # Environment variables (not in repo)
-├── .env.example          # Environment template
-└── requirements.txt      # Python dependencies
+│   ├── background_service.py   # Scheduled tasks and cleanup jobs
+│   ├── call_service.py         # Call logic and database operations
+│   ├── contact_service.py      # Contact management business logic
+│   ├── logger_service.py       # Enhanced logging with Discord webhooks
+│   ├── twilio_service.py       # Twilio SDK integration
+│   └── user_service.py         # User management and presence tracking
+├── database/
+│   ├── database.py             # Database connection and utilities
+│   ├── schema.sql              # Complete database schema
+│   └── smarttv.db              # SQLite database file
+├── middleware/
+│   └── logging_middleware.py   # Request/response logging middleware
+├── utils/
+│   └── ip_utils.py             # IP address utilities for logging
+└── logs/                       # Application logs directory
+    ├── app.log
+    └── errors.log
 ```
 
 ### Design Patterns
 
-- **Blueprint Architecture**: Modular API organization
-- **Service Layer**: Business logic separation from routes
-- **Environment Configuration**: Secure credential management
-- **CORS Support**: Cross-origin resource sharing for Electron app
+- **Blueprint Architecture**: Modular API organization with feature-based routing
+- **Service Layer Pattern**: Business logic separation from API routes
+- **Repository Pattern**: Database access abstraction through services
+- **Observer Pattern**: WebSocket event handling for real-time features
+- **Background Jobs**: Automated cleanup and synchronization tasks
+- **Middleware Pattern**: Request logging and IP address tracking
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 
 - Python 3.8+ and pip
-- Twilio account with API credentials
+- SQLite 3
+- Twilio account with API credentials (optional for Discord webhook integration)
 
 ### Setup
 
 ```bash
 # Navigate to backend directory
-cd server_side
+cd backend
 
 # Install dependencies
-pip install flask flask-cors python-dotenv twilio
-
-# Or use requirements.txt
 pip install -r requirements.txt
 
-# Copy environment template
+# Set up environment variables
 cp .env.example .env
-
-# Edit .env with your credentials
-nano .env
+nano .env  # Edit with your configuration
 ```
 
 ### Environment Configuration
@@ -64,21 +87,27 @@ nano .env
 Create `.env` file with:
 
 ```env
-# Twilio Configuration
+# Twilio Configuration (Required for video calling)
 TWILIO_ACCOUNT_SID=your_twilio_account_sid
 TWILIO_API_KEY=your_twilio_api_key
 TWILIO_API_SECRET=your_twilio_api_secret
+TWILIO_REGION=us1
 
 # Server Configuration
 PORT=3001
 FLASK_ENV=development
 FLASK_DEBUG=True
 
-# Optional: Custom Twilio Region
-TWILIO_REGION=us1
+# Discord Integration (Optional)
+DISCORD_WEBHOOK_URL=your_discord_webhook_url_for_logging
+APP_NAME=SmartTV Backend
+ENVIRONMENT=development
+
+# Database Configuration (Optional - defaults to SQLite)
+DATABASE_PATH=database/smarttv.db
 ```
 
-## 🏃 Running the Server
+## Running the Server
 
 ### Development Mode
 
@@ -96,32 +125,31 @@ FLASK_DEBUG=True python app.py
 ### Production Mode
 
 ```bash
-# Set production environment
-export FLASK_ENV=production
-export FLASK_DEBUG=False
-
-# Run with gunicorn (recommended)
+# Using Gunicorn (recommended for production)
 pip install gunicorn
 gunicorn -w 4 -b 0.0.0.0:3001 app:app
+
+# Using WSGI configuration
+gunicorn --config wsgi.py app:app
 ```
 
-## 🛡️ Crash-Resistant Call Management
+## Crash-Resistant Call Management
 
 ### Twilio-Authoritative Call Cleanup System
 
 The SmartTV backend includes a sophisticated call cleanup system that ensures accurate call tracking even when users experience crashes, network issues, or force-close the application. This system uses Twilio's APIs as the authoritative source of truth.
 
-#### **Key Features**
+#### Key Features
 
-- **🏆 Authoritative**: Twilio is the source of truth, not frontend events
-- **🛡️ Crash-Proof**: Works regardless of client-side failures  
-- **⚡ Real-Time**: Syncs every 3 minutes automatically
-- **🎛️ Conservative**: Won't end legitimate active calls
-- **📊 Accurate**: Proper duration calculation for all scenarios
-- **🔍 Testable**: Manual trigger via admin API
-- **📝 Auditable**: Detailed logging of all sync actions
+- **Authoritative Source**: Twilio serves as the definitive source of truth
+- **Crash-Proof Design**: Functions regardless of client-side failures
+- **Real-Time Synchronization**: Automatically syncs every 3 minutes
+- **Conservative Logic**: Prevents premature termination of active calls
+- **Accurate Duration Tracking**: Proper call duration calculation for all scenarios
+- **Administrative Control**: Manual trigger capabilities for testing and maintenance
+- **Comprehensive Logging**: Detailed audit trail of all sync operations
 
-#### **How It Works**
+#### How It Works
 
 The system runs a background job every 3 minutes that:
 
@@ -134,18 +162,18 @@ The system runs a background job every 3 minutes that:
    - Only 1 participant for >10 minutes → End call (other person crashed)
 4. **Updates Database**: Sets proper `ended_at` timestamps and calculates duration
 
-#### **Crash Scenarios Handled**
+#### Crash Scenarios Handled
 
-| **Crash Scenario** | **Detection Method** | **Action** |
+| Crash Scenario | Detection Method | Action |
 |---|---|---|
-| **Both users crash** | Room empty for >5 minutes | Auto-end with duration |
-| **One user crashes** | 1 participant for >10 minutes | Auto-end with duration |
-| **Network disconnection** | Twilio shows no connection | Auto-end immediately |
-| **App force-closed** | Room abandoned/completed | Auto-end with calculated time |
-| **Browser crash** | Participant disappears from Twilio | Auto-end after grace period |
-| **System shutdown** | Room becomes inactive | Auto-end on next sync cycle |
+| Both users crash | Room empty for >5 minutes | Auto-end with duration |
+| One user crashes | 1 participant for >10 minutes | Auto-end with duration |
+| Network disconnection | Twilio shows no connection | Auto-end immediately |
+| App force-closed | Room abandoned/completed | Auto-end with calculated time |
+| Browser crash | Participant disappears from Twilio | Auto-end after grace period |
+| System shutdown | Room becomes inactive | Auto-end on next sync cycle |
 
-#### **Background Service Configuration**
+#### Background Service Configuration
 
 The background service automatically starts with the Flask application and includes:
 
@@ -159,7 +187,7 @@ sync_calls_with_twilio()
 - Minimum call duration before cleanup: 5 minutes
 ```
 
-#### **Testing the System**
+#### Testing the System
 
 Use the test script to verify functionality:
 
@@ -171,24 +199,24 @@ python test_twilio_sync.py
 curl -X POST http://localhost:3001/api/admin/sync-twilio
 ```
 
-#### **Monitoring and Logging**
+#### Monitoring and Logging
 
 The system provides detailed logging:
 
 ```
-🔄 Synced 3 calls with Twilio, ended 1 calls
-🔧 Ended call abc123 - room_abandoned (Duration: 847s)  
-📞 Call def456 ended via Twilio sync - single_participant_timeout
+Synced 3 calls with Twilio, ended 1 calls
+Ended call abc123 - room_abandoned (Duration: 847s)  
+Call def456 ended via Twilio sync - single_participant_timeout
 ```
 
-#### **Admin Dashboard Integration**
+#### Admin Dashboard Integration
 
 - **Background Service Status**: Shows if Twilio sync is running
 - **Manual Sync Trigger**: Admin can manually trigger sync for testing
 - **Call Statistics**: Accurate call durations and end times
 - **System Health**: Monitors Twilio service availability
 
-## 🔌 API Endpoints
+## API Endpoints
 
 ### Health Check
 
@@ -301,7 +329,7 @@ Returns comprehensive system statistics including call analytics.
 }
 ```
 
-## 🛠️ Development
+## Development
 
 ### Project Components
 
@@ -367,7 +395,7 @@ def new_endpoint():
     return jsonify(result)
 ```
 
-## 🔒 Security
+## Security
 
 ### Environment Variables
 
@@ -394,7 +422,7 @@ CORS(app, origins=[
 - Use proper HTTP status codes
 - Implement rate limiting for production
 
-## 🧪 Testing
+## Testing
 
 ### Twilio Call Cleanup System Testing
 
@@ -416,14 +444,14 @@ curl http://localhost:3001/api/admin/stats
 
 **Test Script Output:**
 ```
-🚀 Starting Twilio Call Sync Tests
+Starting Twilio Call Sync Tests
 ============================================================
-✅ All required environment variables are set
+All required environment variables are set
 
 ==================== Twilio Service ====================
-✅ Twilio service initialized successfully
-✅ Twilio credentials are valid
-📋 Testing active rooms listing...
+Twilio service initialized successfully
+Twilio credentials are valid
+Testing active rooms listing...
    Found 2 active Twilio rooms
    - Room: call_a1b2c3d4 (Status: in-progress)
      Participants: 2
@@ -431,12 +459,12 @@ curl http://localhost:3001/api/admin/stats
        - BOB01 (connected)
 ==================================================
 
-📊 Test Results Summary
+Test Results Summary
 ==============================
-Twilio Service: ✅ PASSED
-Background Service: ✅ PASSED
+Twilio Service: PASSED
+Background Service: PASSED
 
-Overall: ✅ ALL TESTS PASSED
+Overall: ALL TESTS PASSED
 ```
 
 ### Manual Testing
@@ -468,7 +496,7 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 ```
 
-## 📊 Monitoring and Logging
+## Monitoring and Logging
 
 ### Health Monitoring
 
@@ -499,7 +527,7 @@ def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 ```
 
-## 🚀 Deployment
+## Deployment
 
 ### Production Checklist
 
@@ -545,7 +573,7 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -575,7 +603,7 @@ export FLASK_DEBUG=True
 python app.py
 ```
 
-## 📈 Performance
+## Performance
 
 ### Optimization Tips
 
@@ -591,7 +619,7 @@ python app.py
 - Database connection management
 - Session management for stateful operations
 
-## 🤝 Contributing
+## Contributing
 
 ### Development Workflow
 
